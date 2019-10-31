@@ -1301,51 +1301,80 @@ pattern_list(Ces, Isub, Osub, St) ->
 %% set_vsub(Name, Sub, Subs) -> Subs.
 %% subst_vsub(Name, Sub, Subs) -> Subs.
 %% get_vsub(Name, Subs) -> SubName.
-%%  Add/get substitute Sub for Name to VarSub.  Use orddict so we know
-%%  the format is a list {Name,Sub} pairs.  When adding a new
-%%  substitute we fold substitute chains so we never have to search
-%%  more than once.
+%%  Add/get substitute Sub for Name to VarSub.
+%%
+%%  We're using two maps (a lookup table and its inverse) so we can rename all
+%%  references to a variable without having to scan through all variables,
+%%  which can case compile times to spiral out of control (see OTP-16259).
 
-new_sub() -> orddict:new().
+new_sub() -> {#{}, #{}}.
 
-get_vsub(V, Vsub) ->
-    case orddict:find(V, Vsub) of
-	{ok,Val} -> Val;
-	error -> V
+get_vsub(Key, {Lookup, _InvLookup}) ->
+    case Lookup of
+        #{ Key := Val } -> Val;
+        _ -> Key
     end.
 
-set_vsub(V, S, Vsub) ->
-    orddict:store(V, S, Vsub).
-
-subst_vsub(Key, New, Vsub) ->
-    orddict:from_list(subst_vsub_1(Key, New, Vsub)).
-
-subst_vsub_1(Key, New, [{K,Key}|Dict]) ->
-    %% Fold chained substitution.
-    [{K,New}|subst_vsub_1(Key, New, Dict)];
-subst_vsub_1(Key, New, [{K,_}|_]=Dict) when Key < K ->
-    %% Insert the new substitution here, and continue
-    %% look for chained substitutions.
-    [{Key,New}|subst_vsub_2(Key, New, Dict)];
-subst_vsub_1(Key, New, [{K,_}=E|Dict]) when Key > K ->
-    [E|subst_vsub_1(Key, New, Dict)];
-subst_vsub_1(Key, New, []) -> [{Key,New}].
-
-subst_vsub_2(V, S, [{K,V}|Dict]) ->
-    %% Fold chained substitution.
-    [{K,S}|subst_vsub_2(V, S, Dict)];
-subst_vsub_2(V, S, [E|Dict]) ->
-    [E|subst_vsub_2(V, S, Dict)];
-subst_vsub_2(_, _, []) -> [].
-
-get_fsub(F, A, Fsub) ->
-    case orddict:find({F,A}, Fsub) of
-	{ok,Val} -> Val;
-	error -> F
+get_fsub(Name, Arity, {Lookup, _InvLookup}) ->
+    Key = {Name, Arity},
+    case Lookup of
+        #{ Key := Val } -> Val;
+        _ -> Name
     end.
 
-set_fsub(F, A, S, Fsub) ->
-    orddict:store({F,A}, S, Fsub).
+set_vsub(Key, New, Subs) ->
+    set_sub(Key, New, Subs).
+
+set_fsub(Name, Arity, New, Subs) ->
+    set_sub({Name, Arity}, New, Subs).
+
+set_sub(Same, Same, Subs) ->
+    Subs;
+set_sub(Key, New, {Lookup0, InvLookup0}) ->
+    InvLookup = update_inv_lookup(Key, New, Lookup0, InvLookup0),
+    Lookup = Lookup0#{ Key => New },
+    {Lookup, InvLookup}.
+
+update_inv_lookup(Key, New, Lookup, InvLookup0) ->
+    InvLookup = cleanup_inv_lookup(Key, Lookup, InvLookup0),
+    case InvLookup of
+        #{ New := Keys } ->
+            %% Other keys map to the same value, add ours to the set.
+            InvLookup#{ New := ordsets:add_element(Key, Keys) };
+        #{} ->
+            InvLookup#{ New => [Key] }
+    end.
+
+cleanup_inv_lookup(Key, Lookup, InvLookup) when is_map_key(Key, Lookup) ->
+    #{ Key := Old } = Lookup,
+    case InvLookup of
+        #{ Old := [Key] } ->
+            maps:remove(Old, InvLookup);
+        #{ Old := [_|_]=Keys } ->
+            InvLookup#{ Old := ordsets:del_element(Key, Keys) }
+    end;
+cleanup_inv_lookup(_Key, _Lookup, InvLookup) ->
+    InvLookup.
+
+subst_vsub(Key, New, {Lookup0, InvLookup0}) when is_map_key(Key, InvLookup0) ->
+    %% Key has been renamed to New, so we need to replace all existing
+    %% references to Key with New.
+    Keys = map_get(Key, InvLookup0),
+
+    Lookup1 = Lookup0#{ Key => New },
+    Lookup = update_lookup(Keys, New, Lookup1),
+
+    InvLookup1 = maps:remove(Key, InvLookup0),
+    InvLookup = InvLookup1#{ New => ordsets:add_element(Key, Keys) },
+
+    {Lookup, InvLookup};
+subst_vsub(Key, New, Subs) ->
+    set_sub(Key, New, Subs).
+
+update_lookup([Key | Keys], New, Lookup) ->
+    update_lookup(Keys, New, Lookup#{ Key := New });
+update_lookup([], _New, Lookup) ->
+    Lookup.
 
 new_fun_name(St) ->
     new_fun_name("anonymous", St).
