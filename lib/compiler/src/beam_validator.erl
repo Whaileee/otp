@@ -1571,8 +1571,31 @@ verify_arg_type(Reg, GivenType, ParamTypes) ->
 verify_arg_type_1(Reg, GivenType, Info) ->
     RequiredType = proplists:get_value(type, Info, any),
     case meet(GivenType, RequiredType) of
-        GivenType -> ok;
-        _ -> error({bad_arg_type, Reg, GivenType, RequiredType})
+        none ->
+            error({bad_arg_type, Reg, GivenType, RequiredType});
+        _GivenType ->
+            %% Strictly speaking this should always match GivenType, but
+            %% beam_jump:share/1 sometimes joins blocks in a manner that makes
+            %% it very difficult to accurately reconstruct type information,
+            %% for example:
+            %%
+            %%        bug({Tag, _, _} = Key) when Tag == a; Tag == b ->
+            %%            foo(Key);
+            %%        bug({Tag, _} = Key) when Tag == a; Tag == b ->
+            %%            foo(Key).
+            %%
+            %%        foo(I) -> I.
+            %%
+            %% At the first call to foo/1, we know that we have either `{a,_}`
+            %% or `{b,_}`, and at the second call `{a,_,_}` or `{b,_,_}`.
+            %%
+            %% When both calls to foo/1 are joined into the same block, all we
+            %% know is that we have tuple with an arity of at least 2, whose
+            %% first element is `a` or `b`.
+            %%
+            %% Fixing this properly is a big undertaking, so we've decided to
+            %% loosen the validation for now.
+            ok
     end.
 
 allocate(Tag, Stk, Heap, Live, #vst{current=#st{numy=none}=St}=Vst0) ->
