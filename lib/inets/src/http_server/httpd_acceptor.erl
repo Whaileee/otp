@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2023. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2024. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 %%
 %%
 -module(httpd_acceptor).
+-moduledoc false.
 
 -include("httpd.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -37,26 +38,12 @@
 
 start_link(Manager, SocketType, Addr, Port, IpFamily, ConfigDb, AcceptTimeout) ->
     Args = [self(), Manager, SocketType, Addr, Port, IpFamily, ConfigDb, AcceptTimeout],
-    start_link(Args).
+    proc_lib:start_link(?MODULE, acceptor_init, Args).
 
 start_link(Manager, SocketType, Addr, Port, ListenSocket, IpFamily, ConfigDb, AcceptTimeout) ->
     Args = [self(), Manager, SocketType, Addr, Port, ListenSocket, IpFamily, 
 	    ConfigDb, AcceptTimeout],
-    start_link(Args).
-
-%% This synchronization for server start error is solved in OTP-26.0
-%% through using proc_lib:init_fail/2 instead
-%%
-start_link(Args) ->
-    case proc_lib:start_link(?MODULE, acceptor_init, Args) of
-        {ok, _} = Result->
-            Result;
-        {error, Pid, Error} ->
-            Mref = erlang:monitor(process, Pid),
-            receive {'DOWN', Mref, _, _, _} ->
-                    Error
-            end
-    end.
+    proc_lib:start_link(?MODULE, acceptor_init, Args).
 
 acceptor_init(Parent, Manager, SocketType, Addr, Port, {ListenOwner, ListenSocket}, IpFamily,
 	      ConfigDb, AcceptTimeout) ->
@@ -80,8 +67,7 @@ acceptor_init(Parent, Manager, SocketType, Addr, Port, IpFamily,
 	    acceptor_loop(Manager, SocketType, Addr, Port, 
 			  ListenSocket, IpFamily,ConfigDb, AcceptTimeout);
 	Error ->
-	    proc_lib:init_ack(Parent, {error, self(), Error}),
-	    error
+	    proc_lib:init_fail(Parent, Error, {exit, normal})
     end.
    
 do_init(SocketType, Addr, Port, IpFamily) ->

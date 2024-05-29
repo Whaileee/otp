@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2023. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2024. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -22,7 +22,8 @@
 %% 
 
 -module(httpd_request_handler).
-
+-moduledoc false.
+-compile(nowarn_deprecated_callback).
 -behaviour(gen_server).
 
 %% Application internal API
@@ -97,8 +98,10 @@ init([Manager, ConfigDB, AcceptTimeout]) ->
     %%link(Manager), 
     %% At this point the function httpd_request_handler:start/2 will return.
     proc_lib:init_ack({ok, self()}),
-    
     {SocketType, Socket} = await_socket_ownership_transfer(AcceptTimeout),
+    %ServerName = erlang:iolist_to_binary(httpd_util:lookup(ConfigDB, server_name)),
+    %Protocol = protocol(SocketType),
+    %proc_lib:set_label({Protocol, ServerName}),
     
     Peername = http_transport:peername(SocketType, Socket),
     Sockname = http_transport:sockname(SocketType, Socket),
@@ -340,16 +343,16 @@ do_terminate(#state{mod = ModData} = State) ->
     httpd_socket:close(ModData#mod.socket_type, ModData#mod.socket).
 
 format_status(normal, [_, State]) ->
-    [{data, [{"StateData", State}]}];  
+    [{data, [{"StateData", State}]}];
 format_status(terminate, [_, State]) ->
     Mod = (State#state.mod),
     case Mod#mod.socket_type of
-	ip_comm ->
-	    [{data, [{"StateData", State}]}];  
-	{essl, _} ->
-	    %% Do not print ssl options in superviosr reports
-	    [{data, [{"StateData", 
-		      State#state{mod = Mod#mod{socket_type = 'TLS'}}}]}]
+	{ssl, _} ->
+	    %% Do not print ssl options in supervisor reports
+	    [{data, [{"StateData",
+		      State#state{mod = Mod#mod{socket_type = 'TLS'}}}]}];
+        _  ->
+            [{data, [{"StateData", State}]}]
     end.
 
 %%--------------------------------------------------------------------
@@ -773,3 +776,8 @@ setopts(Socket, SocketType, Options) ->
         {error, _} -> %% inet can return einval instead of closed
             self() ! {http_transport:close_tag(SocketType), Socket}
     end.
+
+%% protocol({ssl,_}) ->
+%%     https;
+%% protocol(_) ->
+%%     http.
