@@ -527,8 +527,10 @@ handle_cast({cancel_request, RequestId},
 	[] ->
 	    %% Request already completed nothing to 
 	    %% cancel
+            logger:notice("No Handler ~p", [RequestId]),   
 	    {noreply, State};
 	[{_, Pid, _}] ->
+            logger:notice("Cancel ID: ~p PID: ~p", [RequestId, Pid]),   
 	    httpc_handler:cancel(RequestId, Pid),
 	    ets:delete(State#state.handler_db, RequestId),
 	    {noreply, State}

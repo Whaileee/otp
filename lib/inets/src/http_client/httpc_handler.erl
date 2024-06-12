@@ -219,7 +219,7 @@ stream(BodyPart, Request,_) -> % only 200 and 206 responses can be streamed
 %%--------------------------------------------------------------------
 init([Parent, Request, Options, ProfileName]) ->
     process_flag(trap_exit, true),
-
+    %logger:notice("Handle request from ~p ~p", [Request#request.from, Request#request.id]),
     %% Do not let initial tcp-connection block the manager-process
     proc_lib:init_ack(Parent, self()),
     %{Host, Port} = Request#request.address,
@@ -295,18 +295,23 @@ handle_info(Info, State) ->
 %% Function: terminate(Reason, State) -> _  (ignored by gen_server)
 %% Description: Shutdown the httpc_handler
 %%--------------------------------------------------------------------
-terminate(normal, #state{session = undefined}) ->
+terminate(normal, #state{session = undefined,
+                         request = _Request}) ->
+    %logger:notice("1 Terminated was called with undefined session Request: ~p", [Request]),
     ok;
 %% Init error sending, no session information has been setup but
 %% there is a socket that needs closing.
 terminate(normal,
-          #state{session = #session{id = undefined} = Session}) ->
+          #state{session = #session{id = undefined} = Session,
+                 request = _Request}) ->
+    %logger:notice("2 Terminated was called with undefined session id Resquest ~p", [Request]),
     close_socket(Session);
 %% Socket closed remotely
 terminate(normal, #state{session = #session{socket = {remote_close, Socket},
                                             socket_type = SocketType},
                          request = Request,
                          timers = Timers} = State) ->
+    %logger:notice("3 Terminated was called due to remote side closed socket Request ~p", [Request]),
     clobber_and_retry(State),
     cancel_timers(Timers),
     maybe_deliver_answer(Request, State),
@@ -316,12 +321,15 @@ terminate(_Reason, #state{session = #session{socket = Socket,
                                              socket_type = SocketType},
                           request = undefined,
                           timers = Timers} = State) ->
+    %logger:notice("4 Terminated with reason ~p and Request undefined", [_Reason]),
     clobber_and_retry(State),
     cancel_timer(Timers#timers.queue_timer, timeout_queue),
     http_transport:close(SocketType, Socket);
 terminate(_Reason, #state{request = undefined}) ->
+    %logger:notice("5 Terminated with reason ~p when Request was undefined", [_Reason]),
     ok;
 terminate(Reason, #state{request = Request} = State) ->
+    logger:notice("6 Terminated was called with ~p and Request ~p ", [Reason, Request]),
     NewState = maybe_send_answer(Request,
                                  httpc_response:error(Request, Reason),
                                  State),
@@ -610,6 +618,7 @@ do_handle_info({timeout, RequestId},
             #state{request      = #request{id = RequestId} = Request,
                    canceled     = Canceled,
                    profile_name = ProfileName} = State) ->
+    logger:notice("Timeout Request ~p ~p", [Request]),
     httpc_response:send(Request#request.from, 
                         httpc_response:error(Request, timeout)),
     httpc_manager:request_done(RequestId, ProfileName),
@@ -622,12 +631,13 @@ do_handle_info({timeout, RequestId},
                    profile_name = ProfileName} = State) ->
     Filter = 
         fun(#request{id = Id, from = From} = Request) when Id =:= RequestId ->
+                logger:notice("Timeout Request ~p", [Request]),
                 %% Notify the owner
                 httpc_response:send(From, 
                                     httpc_response:error(Request, timeout)),
                 httpc_manager:request_done(RequestId, ProfileName),
                 [Request#request{from = answer_sent}];
-           (_) ->
+           (_Other) ->
                 true
         end,
     case State#state.status of
@@ -696,9 +706,11 @@ maybe_send_answer(Request, Answer, State) ->
 
 maybe_deliver_answer(#request{from = From} = Request, #state{status = new})
   when From =/= answer_sent ->
+    logger:notice("socket_closed_remotely reply to Request ~p ", [Request]),
     Response = httpc_response:error(Request, socket_closed_remotely),
     httpc_response:send(From, Response);
-maybe_deliver_answer(_,_) ->
+maybe_deliver_answer(_R, _S) ->
+     logger:notice("No response to Request ~p ~p", [_R, _S#state.status]),
     ok.
 
 %%%--------------------------------------------------------------------
@@ -1323,6 +1335,7 @@ answer_request(#request{id = RequestId, from = From} = Request, Msg,
 	       #state{session      = Session, 
 		      timers       = Timers, 
 		      profile_name = ProfileName} = State) -> 
+    %logger:notice("Answer ~p", [From]),
     httpc_response:send(From, Msg),
     RequestTimers = Timers#timers.request_timers,
     TimerRef =
