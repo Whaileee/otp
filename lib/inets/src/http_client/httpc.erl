@@ -805,7 +805,8 @@ handle_request(Method, Url,
 			       ipv6_host_with_brackets = BracketedHost},
 	    case httpc_manager:request(Request, profile_name(Profile)) of
 		{ok, RequestId} ->
-		    handle_answer(RequestId, Sync, Options);
+		    handle_answer(RequestId, Sync, Options,
+                                 element(#http_options.timeout, HTTPOptions));
 		{error, Reason} ->
 		    {error, Reason}
 	    end
@@ -861,9 +862,9 @@ mk_chunkify_fun(ProcessBody) ->
     end.
 
 
-handle_answer(RequestId, false, _) ->
+handle_answer(RequestId, false, _, _) ->
     {ok, RequestId};
-handle_answer(RequestId, true, Options) ->
+handle_answer(RequestId, true, Options, infinity) ->
     receive
 	{http, {RequestId, saved_to_file}} ->
 	    {ok, saved_to_file};
@@ -871,6 +872,19 @@ handle_answer(RequestId, true, Options) ->
 	    return_answer(Options, Result);
 	{http, {RequestId, {error, Reason}}} ->
 	    {error, Reason}
+    end;
+handle_answer(RequestId, true, Options, _TimeOut) ->
+    receive
+	{http, {RequestId, saved_to_file}} ->
+	    {ok, saved_to_file};
+	{http, {RequestId, {_,_,_} = Result}} ->
+	    return_answer(Options, Result);
+	{http, {RequestId, {error, Reason}}} ->
+	    {error, Reason}
+    after _TimeOut ->
+            logger:notice("Client RequestId ~p time out", [RequestId]),
+            cancel_request(RequestId),
+            {error, {client_timeout, RequestId}}
     end.
 
 return_answer(Options, {StatusLine, Headers, BinBody}) ->

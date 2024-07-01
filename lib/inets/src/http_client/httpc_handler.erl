@@ -359,6 +359,7 @@ terminate(_Reason, #state{request = undefined}) ->
     ok;
 
 terminate(Reason, #state{request = Request} = State) -> 
+    logger:notice("6 Terminated was called with ~p and Request ~p ", [Reason, Request]),
     NewState = maybe_send_answer(Request, 
                                  httpc_response:error(Request, Reason), 
                                  State),
@@ -519,7 +520,7 @@ do_handle_info({Proto, _Socket, Data},
   when (Proto =:= tcp) orelse 
        (Proto =:= ssl) orelse 
        (Proto =:= httpc_handler) ->
-
+    logger:notice("1. Timeout Request ~p", [Request]),
     try Module:Function([Data | Args]) of
 	{ok, Result} ->
 	    handle_http_msg(Result, State); 
@@ -647,6 +648,7 @@ do_handle_info({timeout, RequestId},
             #state{request      = #request{id = RequestId} = Request,
                    canceled     = Canceled,
                    profile_name = ProfileName} = State) ->
+    logger:notice("2. Timeout Request ~p", [Request]),
     httpc_response:send(Request#request.from, 
                         httpc_response:error(Request, timeout)),
     httpc_manager:request_done(RequestId, ProfileName),
@@ -659,6 +661,7 @@ do_handle_info({timeout, RequestId},
                    profile_name = ProfileName} = State) ->
     Filter = 
         fun(#request{id = Id, from = From} = Request) when Id =:= RequestId ->
+                logger:notice("3. Timeout Request ~p", [Request]),
                 %% Notify the owner
                 httpc_response:send(From, 
                                     httpc_response:error(Request, timeout)),
@@ -733,9 +736,11 @@ maybe_send_answer(Request, Answer, State) ->
 
 maybe_deliver_answer(#request{from = From} = Request, #state{status = new})
   when From =/= answer_sent ->
+    logger:notice("socket_closed_remotely reply to Request ~p ", [Request]),
     Response = httpc_response:error(Request, socket_closed_remotely),
     httpc_response:send(From, Response);
-maybe_deliver_answer(_,_) ->
+maybe_deliver_answer(_R,_S) ->
+    logger:notice("No response to Request ~p ~p", [_R, _S#state.status]),
     ok.
 
 %%%--------------------------------------------------------------------
