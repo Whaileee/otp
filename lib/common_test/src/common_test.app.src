@@ -19,7 +19,7 @@
 
 {application, common_test,
  [{description, "The OTP Common Test application"},
-  {vsn, "%VSN%"},
+  {vsn, "%VSN%-time-fix"},
   {modules, [ct_cover,
 	     ct,
              ct_default_gl,
