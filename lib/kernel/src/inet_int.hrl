@@ -41,6 +41,13 @@
 -define(INET_TYPE_DGRAM,      2).
 -define(INET_TYPE_SEQPACKET,  3).
 
+%% protocols
+-define(INET_PROTO_DEFAULT,   0).
+-define(INET_PROTO_TCP,       1).
+-define(INET_PROTO_UDP,       2).
+-define(INET_PROTO_SCTP,      3).
+-define(INET_PROTO_MPTCP,     4).
+
 %% socket modes, INET_LOPT_MODE
 -define(INET_MODE_LIST,	      0).
 -define(INET_MODE_BINARY,     1).
