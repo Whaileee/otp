@@ -39,6 +39,7 @@
 -define(PROTO, tcp).
 -define(TYPE, stream).
 
+
 %% port lookup
 getserv(0) -> {ok, 0}.
 
@@ -106,12 +107,13 @@ do_connect(Addr = {?FAMILY, _}, 0, Opts, Time) ->
 	    fd = Fd,
 	    ifaddr = BAddr,
 	    port = 0,
-	    opts = SockOpts}}
+	    opts = SockOpts,
+            protocol = Protocol}}
 	when tuple_size(BAddr) =:= 2, element(1, BAddr) =:= ?FAMILY;
 	     BAddr =:= undefined ->
 	    case inet:open(
 		   Fd, BAddr, 0, SockOpts,
-                   ?PROTO, ?FAMILY, ?TYPE, ?MODULE) of
+                   Protocol, ?FAMILY, ?TYPE, ?MODULE) of
 		{ok, S} ->
 		    case prim_inet:connect(S, Addr, 0, Time) of
 			ok -> {ok,S};
@@ -133,12 +135,13 @@ listen(0, Opts) ->
 	    fd = Fd,
 	    ifaddr = BAddr,
 	    port = 0,
-	    opts = SockOpts} = R}
+	    opts = SockOpts,
+            protocol = Proto} = R}
           when tuple_size(BAddr) =:= 2, element(1, BAddr) =:= ?FAMILY;
                BAddr =:= undefined ->
 	    case inet:open(
 		   Fd, BAddr, 0, SockOpts,
-		   ?PROTO, ?FAMILY, ?TYPE, ?MODULE) of
+		   Proto, ?FAMILY, ?TYPE, ?MODULE) of
 		{ok, S} ->
 		    case prim_inet:listen(S, R#listen_opts.backlog) of
 			ok -> {ok, S};

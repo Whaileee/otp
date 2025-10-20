@@ -3101,7 +3101,7 @@ connect_options() ->
      header, active, packet, packet_size, buffer, mode, deliver, line_delimiter,
      exit_on_close, high_watermark, low_watermark, high_msgq_watermark,
      low_msgq_watermark, send_timeout, send_timeout_close, delay_send, raw,
-     show_econnreset, bind_to_device, read_ahead].
+     show_econnreset, bind_to_device, read_ahead, mptcp].
 
 -doc false.
 connect_options(Opts, Mod) ->
@@ -3167,6 +3167,9 @@ con_opt([Opt | Opts], #connect_opts{ifaddr = IfAddr} = R, As) ->
 	{line_delimiter,C} when is_integer(C), C >= 0, C =< 255 ->
 	    con_add(line_delimiter, C, R, Opts, As);
 
+        mptcp ->
+            con_opt(Opts, R#connect_opts { protocol = Opt }, As);
+
 	{Name,Val} when is_atom(Name) -> con_add(Name, Val, R, Opts, As);
 
 	_ -> {error, badarg}
@@ -3192,7 +3195,7 @@ listen_options() ->
      header, active, packet, buffer, mode, deliver, backlog, ipv6_v6only,
      exit_on_close, high_watermark, low_watermark, high_msgq_watermark,
      low_msgq_watermark, send_timeout, send_timeout_close, delay_send,
-     packet_size, raw, show_econnreset, bind_to_device, read_ahead].
+     packet_size, raw, show_econnreset, bind_to_device, read_ahead, mptcp].
 
 -doc false.
 listen_options(Opts, Mod) ->
@@ -3251,6 +3254,8 @@ list_opt([Opt | Opts], #listen_opts{ifaddr = IfAddr} = R, As) ->
         {active,N} when is_integer(N), N < 32768, N >= -32768 ->
             NOpts = lists:keydelete(active, 1, R#listen_opts.opts),
             list_opt(Opts, R#listen_opts { opts = [{active,N}|NOpts] }, As);
+        mptcp ->
+            list_opt(Opts, R#listen_opts { protocol = Opt }, As);
 	{Name,Val} when is_atom(Name) -> list_add(Name, Val, R, Opts, As);
 	_ -> {error, badarg}
     end;
@@ -3942,7 +3947,7 @@ gethostbyaddr_tm_native(Addr, Timer, Opts) ->
 	     undefined, % Internal - no bind()
 	   BPort :: port_number(),
 	   Opts :: [socket_setopt()],
-	   Protocol :: socket_protocol(),
+	   Protocol :: socket_protocol() | 'mptcp',
 	   Family :: address_family(),
 	   Type :: socket_type(),
 	   Module :: atom()) ->
@@ -3997,7 +4002,7 @@ open(Fd_or_OpenOpts, BAddr, BPort, Opts, Protocol, Family, Type, Module) ->
                   undefined, % Internal - translated to 'any'
                 BPort :: port_number(),
                 Opts :: [socket_setopt()],
-                Protocol :: socket_protocol(),
+                Protocol :: socket_protocol() | 'mptcp',
                 Family :: address_family(),
                 Type :: socket_type(),
                 Module :: atom()) ->

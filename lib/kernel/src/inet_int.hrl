@@ -422,22 +422,24 @@
 %% deliver = term
 %% active  = false
 %%
--record(connect_opts, 
-	{ 
+-record(connect_opts,
+	{
 	  ifaddr,           %% don't bind explicitly, let connect decide
 	  port   = 0,       %% bind to port (default is dynamic port)
 	  fd     = -1,      %% fd >= 0 => already bound
-	  opts   = []       %% [{active,true}] added in inet:connect_options
+	  opts   = [],      %% [{active,true}] added in inet:connect_options
+          protocol = default
 	 }).
 
--record(listen_opts, 
-	{ 
+-record(listen_opts,
+	{
 	  ifaddr,                    %% interpreted as 'any' in *_tcp.erl
 	  port   = 0,                %% bind to port (default is dynamic port)
 	  backlog = ?LISTEN_BACKLOG, %% backlog
 	  fd      = -1,              %% %% fd >= 0 => already bound
-	  opts   = []                %% [{active,true}] added in 
+	  opts   = [],               %% [{active,true}] added in
 	                             %% inet:listen_options
+          protocol = default
 	 }).
 
 -record(udp_opts,
